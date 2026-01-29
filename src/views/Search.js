@@ -1,14 +1,26 @@
 import { sampleBooks } from '../data/books.js';
 import { createBookCard } from '../components/BookCard.js';
+import {
+  createSearchBar,
+  createResultsContainer,
+  updateResultsState,
+} from '../components/SearchBar.js';
 
 export function renderSearch(container) {
   const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
-  const query = urlParams.get('q') || '';
+  const initialQuery = urlParams.get('q') || '';
 
+  // State
+  let currentPage = 1;
+  let currentQuery = initialQuery;
+  let currentFilters = { types: [], sort: 'relevance' };
+  const booksPerPage = 8;
+
+  // Create page structure
   container.innerHTML = `
     <div class="search-page">
-      <aside class="filters-sidebar">
-        <h3>Filters</h3>
+      <aside class="filters-sidebar" id="filters-sidebar">
+        <h3>Advanced Filters</h3>
 
         <div class="filter-group">
           <label for="genre-filter">Genre</label>
@@ -20,6 +32,7 @@ export function renderSearch(container) {
             <option value="romance">Romance</option>
             <option value="dystopian">Dystopian</option>
             <option value="classic">Classic</option>
+            <option value="gothic">Gothic</option>
           </select>
         </div>
 
@@ -50,107 +63,402 @@ export function renderSearch(container) {
           <label for="pages-filter">Page Count</label>
           <select id="pages-filter">
             <option value="">Any Length</option>
-            <option value="200">Under 200 pages</option>
-            <option value="400">200-400 pages</option>
-            <option value="600">400-600 pages</option>
-            <option value="1000">600+ pages</option>
+            <option value="short">Under 200 pages</option>
+            <option value="medium">200-400 pages</option>
+            <option value="long">400-600 pages</option>
+            <option value="epic">600+ pages</option>
           </select>
         </div>
 
-        <button class="btn-primary" style="width: 100%; margin-top: 16px;" id="apply-filters">
+        <button class="btn btn-primary btn-block mt-4" id="apply-filters">
           Apply Filters
+        </button>
+
+        <button class="btn btn-ghost btn-block mt-2" id="clear-filters">
+          Clear All Filters
         </button>
       </aside>
 
-      <div class="search-results">
-        <div class="search-header">
-          <div class="search-header-bar">
-            <input type="text" placeholder="Search books..." id="search-input" value="${query}">
-            <button id="search-btn">Search</button>
-          </div>
-          <p class="results-info">Showing <strong id="results-count">0</strong> results${query ? ` for "${query}"` : ''}</p>
-        </div>
-
-        <div class="book-grid" id="book-grid"></div>
-
-        <div class="pagination" id="pagination"></div>
+      <div class="search-results" id="search-results-area">
+        <div class="search-header" id="search-header"></div>
+        <div id="results-container-wrapper"></div>
       </div>
     </div>
   `;
 
-  const bookGrid = document.getElementById('book-grid');
-  const resultsCount = document.getElementById('results-count');
-  const searchInput = document.getElementById('search-input');
-  const searchBtn = document.getElementById('search-btn');
-  const pagination = document.getElementById('pagination');
+  // Get container elements
+  const searchHeader = document.getElementById('search-header');
+  const resultsWrapper = document.getElementById('results-container-wrapper');
 
-  let currentPage = 1;
-  const booksPerPage = 8;
+  // Create and append search bar
+  const searchBar = createSearchBar({
+    initialQuery,
+    placeholder: 'Search for books, authors, or ISBN...',
+    helperText: 'Search by title, author name, genre, or ISBN number',
+    autofocus: true,
+    showFilters: true,
+    onSearch: handleSearch,
+    onFilterChange: handleQuickFilterChange,
+  });
+  searchHeader.appendChild(searchBar);
 
-  function filterBooks() {
-    const searchQuery = searchInput.value.toLowerCase();
-    return sampleBooks.filter(book =>
-      book.title.toLowerCase().includes(searchQuery) ||
-      book.author.toLowerCase().includes(searchQuery) ||
-      book.genre.toLowerCase().includes(searchQuery)
-    );
+  // Create and append results container
+  const resultsContainer = createResultsContainer({
+    id: 'search-results',
+    showStats: true,
+  });
+  resultsWrapper.appendChild(resultsContainer);
+
+  // Get elements
+  const resultsGrid = document.getElementById('results-grid');
+  const pagination = document.getElementById('results-pagination');
+
+  // Filter elements
+  const genreFilter = document.getElementById('genre-filter');
+  const ratingFilter = document.getElementById('rating-filter');
+  const yearFilter = document.getElementById('year-filter');
+  const pagesFilter = document.getElementById('pages-filter');
+  const applyFiltersBtn = document.getElementById('apply-filters');
+  const clearFiltersBtn = document.getElementById('clear-filters');
+  const retryBtn = document.getElementById('retry-search');
+
+  /**
+   * Handle search submission
+   */
+  function handleSearch(query, filters = currentFilters) {
+    currentQuery = query;
+    currentFilters = filters;
+    currentPage = 1;
+    performSearch();
   }
 
+  /**
+   * Handle quick filter changes
+   */
+  function handleQuickFilterChange(filters) {
+    currentFilters = { ...currentFilters, ...filters };
+    currentPage = 1;
+    performSearch();
+  }
+
+  /**
+   * Perform the search with current parameters
+   */
+  function performSearch() {
+    // Show loading state
+    updateResultsState(resultsContainer, { loading: true });
+
+    // Simulate API delay for demo purposes
+    setTimeout(() => {
+      try {
+        const books = filterBooks();
+
+        if (books.length === 0) {
+          updateResultsState(resultsContainer, {
+            empty: true,
+            count: 0,
+            query: currentQuery,
+          });
+          return;
+        }
+
+        // Success - display books
+        displayBooks(books, currentPage);
+
+        updateResultsState(resultsContainer, {
+          loading: false,
+          empty: false,
+          error: false,
+          count: books.length,
+          query: currentQuery,
+          showPagination: books.length > booksPerPage,
+        });
+      } catch (error) {
+        updateResultsState(resultsContainer, {
+          error: true,
+          errorMessage: error.message || 'Failed to search books. Please try again.',
+        });
+      }
+    }, 300); // Small delay to show loading state
+  }
+
+  /**
+   * Filter books based on all criteria
+   */
+  function filterBooks() {
+    const searchQuery = currentQuery.toLowerCase();
+    const genre = genreFilter.value.toLowerCase();
+    const minRating = parseFloat(ratingFilter.value) || 0;
+    const yearRange = yearFilter.value;
+    const pageRange = pagesFilter.value;
+
+    return sampleBooks.filter(book => {
+      // Text search
+      const matchesQuery = !searchQuery ||
+        book.title.toLowerCase().includes(searchQuery) ||
+        book.author.toLowerCase().includes(searchQuery) ||
+        book.genre.toLowerCase().includes(searchQuery) ||
+        (book.isbn && book.isbn.includes(searchQuery));
+
+      // Genre filter
+      const matchesGenre = !genre ||
+        book.genre.toLowerCase().includes(genre);
+
+      // Rating filter
+      const matchesRating = book.rating >= minRating;
+
+      // Year filter
+      let matchesYear = true;
+      if (yearRange) {
+        const pubYear = parseInt(book.published);
+        switch (yearRange) {
+          case '2020':
+            matchesYear = pubYear >= 2020;
+            break;
+          case '2010':
+            matchesYear = pubYear >= 2010 && pubYear < 2020;
+            break;
+          case '2000':
+            matchesYear = pubYear >= 2000 && pubYear < 2010;
+            break;
+          case '1900':
+            matchesYear = pubYear >= 1900 && pubYear < 2000;
+            break;
+          case '1800':
+            matchesYear = pubYear < 1900;
+            break;
+        }
+      }
+
+      // Page count filter
+      let matchesPages = true;
+      if (pageRange) {
+        switch (pageRange) {
+          case 'short':
+            matchesPages = book.pages < 200;
+            break;
+          case 'medium':
+            matchesPages = book.pages >= 200 && book.pages < 400;
+            break;
+          case 'long':
+            matchesPages = book.pages >= 400 && book.pages < 600;
+            break;
+          case 'epic':
+            matchesPages = book.pages >= 600;
+            break;
+        }
+      }
+
+      // Quick filter types
+      let matchesType = true;
+      if (currentFilters.types && currentFilters.types.length > 0) {
+        const genreLower = book.genre.toLowerCase();
+        matchesType = currentFilters.types.some(type => {
+          switch (type) {
+            case 'fiction':
+              return genreLower.includes('fiction') && !genreLower.includes('non-fiction');
+            case 'nonfiction':
+              return genreLower.includes('non-fiction');
+            case 'fantasy':
+              return genreLower.includes('fantasy');
+            case 'scifi':
+              return genreLower.includes('science fiction') || genreLower.includes('sci-fi');
+            case 'romance':
+              return genreLower.includes('romance');
+            default:
+              return true;
+          }
+        });
+      }
+
+      return matchesQuery && matchesGenre && matchesRating && matchesYear && matchesPages && matchesType;
+    }).sort((a, b) => {
+      // Sort based on current sort selection
+      switch (currentFilters.sort) {
+        case 'newest':
+          return parseInt(b.published) - parseInt(a.published);
+        case 'rating':
+          return b.rating - a.rating;
+        case 'title':
+          return a.title.localeCompare(b.title);
+        default:
+          return 0; // Keep original order for relevance
+      }
+    });
+  }
+
+  /**
+   * Display books for the current page
+   */
   function displayBooks(books, page = 1) {
-    bookGrid.innerHTML = '';
+    resultsGrid.innerHTML = '';
     const start = (page - 1) * booksPerPage;
     const end = start + booksPerPage;
     const pageBooks = books.slice(start, end);
 
     pageBooks.forEach(book => {
-      bookGrid.appendChild(createBookCard(book));
+      resultsGrid.appendChild(createBookCard(book));
     });
 
-    resultsCount.textContent = books.length;
+    resultsGrid.classList.add('grid-view');
     renderPagination(books.length, page);
   }
 
-  function renderPagination(totalBooks, currentPage) {
+  /**
+   * Render pagination controls
+   */
+  function renderPagination(totalBooks, page) {
     const totalPages = Math.ceil(totalBooks / booksPerPage);
     pagination.innerHTML = '';
 
-    if (totalPages <= 1) return;
+    if (totalPages <= 1) {
+      pagination.style.display = 'none';
+      return;
+    }
+
+    pagination.style.display = 'flex';
 
     // Previous button
     const prevBtn = document.createElement('button');
-    prevBtn.textContent = '← Prev';
-    prevBtn.disabled = currentPage === 1;
-    prevBtn.addEventListener('click', () => displayBooks(filterBooks(), currentPage - 1));
+    prevBtn.className = 'btn btn-secondary btn-sm';
+    prevBtn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+      Prev
+    `;
+    prevBtn.disabled = page === 1;
+    prevBtn.addEventListener('click', () => {
+      currentPage = page - 1;
+      performSearch();
+      scrollToTop();
+    });
     pagination.appendChild(prevBtn);
 
     // Page numbers
-    for (let i = 1; i <= totalPages; i++) {
-      const pageBtn = document.createElement('button');
-      pageBtn.textContent = i;
-      pageBtn.classList.toggle('active', i === currentPage);
-      pageBtn.addEventListener('click', () => displayBooks(filterBooks(), i));
-      pagination.appendChild(pageBtn);
+    const maxVisible = 5;
+    let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    if (startPage > 1) {
+      pagination.appendChild(createPageButton(1, page));
+      if (startPage > 2) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '...';
+        ellipsis.style.padding = '0 8px';
+        ellipsis.style.color = 'var(--gray-400)';
+        pagination.appendChild(ellipsis);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pagination.appendChild(createPageButton(i, page));
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'pagination-ellipsis';
+        ellipsis.textContent = '...';
+        ellipsis.style.padding = '0 8px';
+        ellipsis.style.color = 'var(--gray-400)';
+        pagination.appendChild(ellipsis);
+      }
+      pagination.appendChild(createPageButton(totalPages, page));
     }
 
     // Next button
     const nextBtn = document.createElement('button');
-    nextBtn.textContent = 'Next →';
-    nextBtn.disabled = currentPage === totalPages;
-    nextBtn.addEventListener('click', () => displayBooks(filterBooks(), currentPage + 1));
+    nextBtn.className = 'btn btn-secondary btn-sm';
+    nextBtn.innerHTML = `
+      Next
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 18 6-6-6-6"/>
+      </svg>
+    `;
+    nextBtn.disabled = page === totalPages;
+    nextBtn.addEventListener('click', () => {
+      currentPage = page + 1;
+      performSearch();
+      scrollToTop();
+    });
     pagination.appendChild(nextBtn);
   }
 
-  const doSearch = () => {
-    displayBooks(filterBooks(), 1);
-  };
+  /**
+   * Create a page number button
+   */
+  function createPageButton(pageNum, currentPage) {
+    const btn = document.createElement('button');
+    btn.className = `btn btn-sm ${pageNum === currentPage ? 'btn-primary' : 'btn-ghost'}`;
+    btn.textContent = pageNum;
+    btn.addEventListener('click', () => {
+      currentPage = pageNum;
+      performSearch();
+      scrollToTop();
+    });
+    return btn;
+  }
 
-  searchBtn.addEventListener('click', doSearch);
-  searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') doSearch();
+  /**
+   * Scroll to top of results
+   */
+  function scrollToTop() {
+    const searchHeader = document.getElementById('search-header');
+    if (searchHeader) {
+      searchHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  /**
+   * Clear all filters
+   */
+  function clearAllFilters() {
+    genreFilter.value = '';
+    ratingFilter.value = '';
+    yearFilter.value = '';
+    pagesFilter.value = '';
+
+    // Reset quick filters
+    const filterBtns = searchBar.querySelectorAll('.quick-filter-btn');
+    filterBtns.forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.value === 'all') {
+        btn.classList.add('active');
+      }
+    });
+
+    const sortSelect = searchBar.querySelector('#quick-sort');
+    if (sortSelect) {
+      sortSelect.value = 'relevance';
+    }
+
+    currentFilters = { types: [], sort: 'relevance' };
+    performSearch();
+  }
+
+  // Event listeners for sidebar filters
+  applyFiltersBtn.addEventListener('click', () => performSearch());
+  clearFiltersBtn.addEventListener('click', clearAllFilters);
+
+  // Retry button for error state
+  if (retryBtn) {
+    retryBtn.addEventListener('click', () => performSearch());
+  }
+
+  // Allow filters to trigger search on change (optional - for immediate feedback)
+  [genreFilter, ratingFilter, yearFilter, pagesFilter].forEach(filter => {
+    filter.addEventListener('change', () => {
+      // Optional: Auto-apply filters on change
+      // performSearch();
+    });
   });
 
-  document.getElementById('apply-filters').addEventListener('click', doSearch);
-
-  // Initial display
-  displayBooks(filterBooks(), 1);
+  // Initial search
+  performSearch();
 }
