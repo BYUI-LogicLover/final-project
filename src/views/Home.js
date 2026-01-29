@@ -1,7 +1,12 @@
-import { readingLists, userStats } from '../data/books.js';
+import { userStats } from '../data/books.js';
 import { openBookModal } from '../components/BookModal.js';
+import { getReadingLists, getListStats } from '../services/readingListService.js';
 
 export function renderHome(container) {
+  // Get reading lists from storage
+  const readingLists = getReadingLists();
+  const stats = getListStats();
+
   container.innerHTML = `
     <section class="hero">
       <h1>Track Your Reading Journey</h1>
@@ -51,21 +56,21 @@ export function renderHome(container) {
             <div class="stat-item">
               <div class="stat-icon books">📚</div>
               <div>
-                <div class="stat-value">${userStats.booksRead}</div>
+                <div class="stat-value">${stats.completed || userStats.booksRead}</div>
                 <div class="stat-label">Books Read</div>
               </div>
             </div>
             <div class="stat-item">
               <div class="stat-icon pages">📄</div>
               <div>
-                <div class="stat-value">${userStats.pagesRead.toLocaleString()}</div>
+                <div class="stat-value">${(stats.totalPagesRead || userStats.pagesRead).toLocaleString()}</div>
                 <div class="stat-label">Pages Read</div>
               </div>
             </div>
             <div class="stat-item">
               <div class="stat-icon rating">⭐</div>
               <div>
-                <div class="stat-value">${userStats.avgRating}</div>
+                <div class="stat-value">${stats.averageRating || userStats.avgRating}</div>
                 <div class="stat-label">Avg Rating</div>
               </div>
             </div>
@@ -104,14 +109,37 @@ export function renderHome(container) {
   });
 }
 
+// Open Library covers API
+const COVERS_API = 'https://covers.openlibrary.org/b';
+
+/**
+ * Get cover URL for a book using ISBN
+ */
+function getBookCoverUrl(book) {
+  if (book.cover || book.coverUrl) {
+    return book.cover || book.coverUrl;
+  }
+  if (book.isbn) {
+    const cleanIsbn = book.isbn.replace(/[-\s]/g, '');
+    return `${COVERS_API}/isbn/${cleanIsbn}-S.jpg`;
+  }
+  return null;
+}
+
 function populateList(containerId, books, showProgress = false) {
   const container = document.getElementById(containerId);
 
   books.forEach(book => {
     const item = document.createElement('div');
     item.className = 'list-item';
+
+    const coverUrl = getBookCoverUrl(book);
+    const coverHtml = coverUrl
+      ? `<img src="${coverUrl}" alt="${book.title}" onerror="this.onerror=null; this.parentElement.textContent='📚'">`
+      : '📚';
+
     item.innerHTML = `
-      <div class="list-item-cover">📚</div>
+      <div class="list-item-cover">${coverHtml}</div>
       <div class="list-item-info">
         <h4>${book.title}</h4>
         <p>${book.author}</p>

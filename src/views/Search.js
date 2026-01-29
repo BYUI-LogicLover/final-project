@@ -1,10 +1,39 @@
-import { sampleBooks } from '../data/books.js';
+import { searchBooks } from '../services/apiService.js';
 import { createBookCard } from '../components/BookCard.js';
 import {
   createSearchBar,
   createResultsContainer,
   updateResultsState,
 } from '../components/SearchBar.js';
+
+/**
+ * Debounce utility for search input
+ */
+function debounce(fn, delay) {
+  let timeoutId;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+
+/**
+ * Normalize API book data to match BookCard expected format
+ */
+function normalizeBookForDisplay(book) {
+  return {
+    id: book.id,
+    title: book.title,
+    author: Array.isArray(book.authors) ? book.authors.join(', ') : book.authors || 'Unknown',
+    cover: book.coverUrl,
+    rating: book.rating || 0,
+    pages: book.pageCount || 0,
+    published: book.publishDate || '',
+    genre: Array.isArray(book.subjects) ? book.subjects[0] || '' : '',
+    description: book.description || '',
+    ...book
+  };
+}
 
 export function renderSearch(container) {
   const urlParams = new URLSearchParams(window.location.hash.split('?')[1]);
@@ -15,6 +44,8 @@ export function renderSearch(container) {
   let currentQuery = initialQuery;
   let currentFilters = { types: [], sort: 'relevance' };
   const booksPerPage = 8;
+  let totalPages = 1;
+  let lastSearchResults = [];
 
   // Create page structure
   container.innerHTML = `
@@ -122,6 +153,21 @@ export function renderSearch(container) {
   const clearFiltersBtn = document.getElementById('clear-filters');
   const retryBtn = document.getElementById('retry-search');
 
+  // Debounced search for live typing (300ms delay)
+  const debouncedSearch = debounce((query) => {
+    currentQuery = query;
+    currentPage = 1;
+    performSearch();
+  }, 300);
+
+  // Connect debounced search to input for live search as user types
+  const searchInput = document.getElementById('search-bar-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      debouncedSearch(e.target.value);
+    });
+  }
+
   /**
    * Handle search submission
    */
@@ -144,95 +190,106 @@ export function renderSearch(container) {
   /**
    * Perform the search with current parameters
    */
-  function performSearch() {
+  async function performSearch() {
     // Show loading state
     updateResultsState(resultsContainer, { loading: true });
 
-    // Simulate API delay for demo purposes
-    setTimeout(() => {
-      try {
-        const books = filterBooks();
+    // Don't search if query is empty
+    if (!currentQuery.trim()) {
+      updateResultsState(resultsContainer, {
+        empty: true,
+        count: 0,
+        query: '',
+      });
+      return;
+    }
 
-        if (books.length === 0) {
-          updateResultsState(resultsContainer, {
-            empty: true,
-            count: 0,
-            query: currentQuery,
-          });
-          return;
-        }
+    try {
+      const response = await searchBooks(currentQuery, {
+        page: currentPage,
+        limit: booksPerPage,
+      });
 
-        // Success - display books
-        displayBooks(books, currentPage);
+      const books = response.books.map(normalizeBookForDisplay);
+      lastSearchResults = books;
+      totalPages = response.totalPages || 1;
 
+      // Apply local filters (genre, rating, year, pages) since API doesn't support them
+      const filteredBooks = applyLocalFilters(books);
+
+      if (filteredBooks.length === 0) {
         updateResultsState(resultsContainer, {
-          loading: false,
-          empty: false,
-          error: false,
-          count: books.length,
+          empty: true,
+          count: 0,
           query: currentQuery,
-          showPagination: books.length > booksPerPage,
         });
-      } catch (error) {
-        updateResultsState(resultsContainer, {
-          error: true,
-          errorMessage: error.message || 'Failed to search books. Please try again.',
-        });
+        return;
       }
-    }, 300); // Small delay to show loading state
+
+      // Success - display books
+      displayBooks(filteredBooks);
+
+      updateResultsState(resultsContainer, {
+        loading: false,
+        empty: false,
+        error: false,
+        count: response.total || filteredBooks.length,
+        query: currentQuery,
+        showPagination: totalPages > 1,
+      });
+    } catch (error) {
+      updateResultsState(resultsContainer, {
+        error: true,
+        errorMessage: error.message || 'Failed to search books. Please try again.',
+      });
+    }
   }
 
   /**
-   * Filter books based on all criteria
+   * Apply local filters to API results (genre, rating, year, pages)
    */
-  function filterBooks() {
-    const searchQuery = currentQuery.toLowerCase();
+  function applyLocalFilters(books) {
     const genre = genreFilter.value.toLowerCase();
     const minRating = parseFloat(ratingFilter.value) || 0;
     const yearRange = yearFilter.value;
     const pageRange = pagesFilter.value;
 
-    return sampleBooks.filter(book => {
-      // Text search
-      const matchesQuery = !searchQuery ||
-        book.title.toLowerCase().includes(searchQuery) ||
-        book.author.toLowerCase().includes(searchQuery) ||
-        book.genre.toLowerCase().includes(searchQuery) ||
-        (book.isbn && book.isbn.includes(searchQuery));
-
+    return books.filter(book => {
       // Genre filter
-      const matchesGenre = !genre ||
-        book.genre.toLowerCase().includes(genre);
+      const bookGenre = (book.genre || '').toLowerCase();
+      const matchesGenre = !genre || bookGenre.includes(genre);
 
       // Rating filter
-      const matchesRating = book.rating >= minRating;
+      const matchesRating = (book.rating || 0) >= minRating;
 
       // Year filter
       let matchesYear = true;
-      if (yearRange) {
+      if (yearRange && book.published) {
         const pubYear = parseInt(book.published);
-        switch (yearRange) {
-          case '2020':
-            matchesYear = pubYear >= 2020;
-            break;
-          case '2010':
-            matchesYear = pubYear >= 2010 && pubYear < 2020;
-            break;
-          case '2000':
-            matchesYear = pubYear >= 2000 && pubYear < 2010;
-            break;
-          case '1900':
-            matchesYear = pubYear >= 1900 && pubYear < 2000;
-            break;
-          case '1800':
-            matchesYear = pubYear < 1900;
-            break;
+        if (!isNaN(pubYear)) {
+          switch (yearRange) {
+            case '2020':
+              matchesYear = pubYear >= 2020;
+              break;
+            case '2010':
+              matchesYear = pubYear >= 2010 && pubYear < 2020;
+              break;
+            case '2000':
+              matchesYear = pubYear >= 2000 && pubYear < 2010;
+              break;
+            case '1900':
+              matchesYear = pubYear >= 1900 && pubYear < 2000;
+              break;
+            case '1800':
+              matchesYear = pubYear < 1900;
+              break;
+          }
         }
       }
 
       // Page count filter
       let matchesPages = true;
-      if (pageRange) {
+      if (pageRange && book.pages) {
         switch (pageRange) {
           case 'short':
             matchesPages = book.pages < 200;
@@ -252,7 +309,7 @@ export function renderSearch(container) {
       // Quick filter types
       let matchesType = true;
       if (currentFilters.types && currentFilters.types.length > 0) {
-        const genreLower = book.genre.toLowerCase();
+        const genreLower = bookGenre;
         matchesType = currentFilters.types.some(type => {
           switch (type) {
             case 'fiction':
@@ -271,16 +328,16 @@ export function renderSearch(container) {
         });
       }
 
-      return matchesQuery && matchesGenre && matchesRating && matchesYear && matchesPages && matchesType;
+      return matchesGenre && matchesRating && matchesYear && matchesPages && matchesType;
     }).sort((a, b) => {
       // Sort based on current sort selection
       switch (currentFilters.sort) {
         case 'newest':
-          return parseInt(b.published) - parseInt(a.published);
+          return parseInt(b.published || 0) - parseInt(a.published || 0);
         case 'rating':
-          return b.rating - a.rating;
+          return (b.rating || 0) - (a.rating || 0);
         case 'title':
-          return a.title.localeCompare(b.title);
+          return (a.title || '').localeCompare(b.title || '');
         default:
           return 0; // Keep original order for relevance
       }
@@ -288,27 +345,23 @@ export function renderSearch(container) {
   }
 
   /**
-   * Display books for the current page
+   * Display books (API already handles pagination)
    */
-  function displayBooks(books, page = 1) {
+  function displayBooks(books) {
     resultsGrid.innerHTML = '';
-    const start = (page - 1) * booksPerPage;
-    const end = start + booksPerPage;
-    const pageBooks = books.slice(start, end);
 
-    pageBooks.forEach(book => {
+    books.forEach(book => {
       resultsGrid.appendChild(createBookCard(book));
     });
 
     resultsGrid.classList.add('grid-view');
-    renderPagination(books.length, page);
+    renderPagination();
   }
 
   /**
    * Render pagination controls
    */
-  function renderPagination(totalBooks, page) {
-    const totalPages = Math.ceil(totalBooks / booksPerPage);
+  function renderPagination() {
     pagination.innerHTML = '';
 
     if (totalPages <= 1) {
@@ -327,9 +380,9 @@ export function renderSearch(container) {
       </svg>
       Prev
     `;
-    prevBtn.disabled = page === 1;
+    prevBtn.disabled = currentPage === 1;
     prevBtn.addEventListener('click', () => {
-      currentPage = page - 1;
+      currentPage--;
       performSearch();
       scrollToTop();
     });
@@ -337,7 +390,7 @@ export function renderSearch(container) {
 
     // Page numbers
     const maxVisible = 5;
-    let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
     let endPage = Math.min(totalPages, startPage + maxVisible - 1);
 
     if (endPage - startPage < maxVisible - 1) {
@@ -345,7 +398,7 @@ export function renderSearch(container) {
     }
 
     if (startPage > 1) {
-      pagination.appendChild(createPageButton(1, page));
+      pagination.appendChild(createPageButton(1));
       if (startPage > 2) {
         const ellipsis = document.createElement('span');
         ellipsis.className = 'pagination-ellipsis';
@@ -357,7 +410,7 @@ export function renderSearch(container) {
     }
 
     for (let i = startPage; i <= endPage; i++) {
-      pagination.appendChild(createPageButton(i, page));
+      pagination.appendChild(createPageButton(i));
     }
 
     if (endPage < totalPages) {
@@ -369,7 +422,7 @@ export function renderSearch(container) {
         ellipsis.style.color = 'var(--gray-400)';
         pagination.appendChild(ellipsis);
       }
-      pagination.appendChild(createPageButton(totalPages, page));
+      pagination.appendChild(createPageButton(totalPages));
     }
 
     // Next button
@@ -381,9 +434,9 @@ export function renderSearch(container) {
         <path d="m9 18 6-6-6-6"/>
       </svg>
     `;
-    nextBtn.disabled = page === totalPages;
+    nextBtn.disabled = currentPage === totalPages;
     nextBtn.addEventListener('click', () => {
-      currentPage = page + 1;
+      currentPage++;
       performSearch();
       scrollToTop();
     });
@@ -393,7 +446,7 @@ export function renderSearch(container) {
   /**
    * Create a page number button
    */
-  function createPageButton(pageNum, currentPage) {
+  function createPageButton(pageNum) {
     const btn = document.createElement('button');
     btn.className = `btn btn-sm ${pageNum === currentPage ? 'btn-primary' : 'btn-ghost'}`;
     btn.textContent = pageNum;
