@@ -8,7 +8,6 @@ const routes = {
   '/search': renderSearch,
   '/stats': renderStats,
   '/discover': renderDiscover,
-  '/lists': renderHome,
 };
 
 export const router = {

@@ -1135,6 +1135,7 @@ strong {
   border-radius: 50px;
   box-shadow: var(--shadow-lg);
   outline: none;
+  color: black;
 }
 
 .search-input::placeholder {
@@ -2047,6 +2048,7 @@ strong {
   background-color: var(--white);
   transition: all var(--transition-base);
   box-shadow: var(--shadow-sm);
+  color: black;
 }
 
 .search-bar .search-input:hover {

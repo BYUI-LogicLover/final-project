@@ -14,7 +14,6 @@ export function renderHeader() {
         </a>
         <nav class="nav">
           <a href="#/" class="nav-link ${currentHash === '/' ? 'active' : ''}">Home</a>
-          <a href="#/lists" class="nav-link ${currentHash === '/lists' ? 'active' : ''}">My Lists</a>
           <a href="#/discover" class="nav-link ${currentHash === '/discover' ? 'active' : ''}">Discover</a>
           <a href="#/stats" class="nav-link ${currentHash === '/stats' ? 'active' : ''}">Stats</a>
         </nav>
