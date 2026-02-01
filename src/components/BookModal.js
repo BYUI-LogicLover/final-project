@@ -1,4 +1,4 @@
-import { addToList, getBookListStatus, LIST_TYPES } from '../services/readingListService.js';
+import { addToList, getBookListStatus, LIST_TYPES, updateProgress } from '../services/readingListService.js';
 
 // Open Library covers API
 const COVERS_API = 'https://covers.openlibrary.org/b';
@@ -26,6 +26,10 @@ export function openBookModal(book) {
   // Check list status
   const { inList, listType } = getBookListStatus(book.id);
   const rating = typeof book.rating === 'number' ? book.rating : 0;
+  const currentProgress = book.progress || 0;
+  const totalPages = book.pages || 0;
+  const pagesRead = book.pagesRead || Math.round((currentProgress / 100) * totalPages);
+  const isCurrentlyReading = listType === LIST_TYPES.READING;
 
   // Determine button states based on current list
   const readingBtnClass = listType === LIST_TYPES.READING ? 'btn-success' : 'btn-primary';
@@ -34,6 +38,34 @@ export function openBookModal(book) {
   const completedBtnText = listType === LIST_TYPES.COMPLETED ? '✓ Completed' : 'Mark as Read';
   const wantBtnClass = listType === LIST_TYPES.TO_READ ? 'btn-success' : 'btn-ghost';
   const wantBtnText = listType === LIST_TYPES.TO_READ ? '✓ Want to Read' : 'Want to Read';
+
+  // Progress tracker HTML (only shown for books currently being read)
+  const progressTrackerHTML = isCurrentlyReading ? `
+    <div class="progress-tracker">
+      <div class="progress-header">
+        <label>Reading Progress</label>
+        <span id="progress-value" class="progress-percentage">${currentProgress}%</span>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progress-bar" style="width: ${currentProgress}%;"></div>
+      </div>
+      <div class="pages-input-container">
+        <div class="pages-input-group">
+          <label for="pages-read-input">Pages read:</label>
+          <input 
+            type="number" 
+            id="pages-read-input" 
+            min="0" 
+            max="${totalPages}"
+            value="${pagesRead}"
+            class="pages-input"
+          />
+          <span class="pages-total">of ${totalPages > 0 ? totalPages : '?'} pages</span>
+        </div>
+        <button id="btn-save-progress" class="btn btn-sm btn-primary">Update Progress</button>
+      </div>
+    </div>
+  ` : '';
 
   container.innerHTML = `
     <div class="modal-overlay" id="book-modal">
@@ -73,6 +105,7 @@ export function openBookModal(book) {
               <button class="${completedBtnClass}" id="btn-completed">${completedBtnText}</button>
               <button class="${wantBtnClass}" id="btn-want">${wantBtnText}</button>
             </div>
+            ${progressTrackerHTML}
           </div>
         </div>
       </div>
@@ -113,6 +146,48 @@ export function openBookModal(book) {
       closeModalAndRefresh();
     }
   });
+
+  // Progress tracker event handlers (only if currently reading)
+  if (isCurrentlyReading) {
+    const pagesReadInput = overlay.querySelector('#pages-read-input');
+    const progressValue = overlay.querySelector('#progress-value');
+    const progressBar = overlay.querySelector('#progress-bar');
+    const saveProgressBtn = overlay.querySelector('#btn-save-progress');
+
+    // Function to update the progress display
+    const updateProgressDisplay = () => {
+      const pages = parseInt(pagesReadInput.value, 10) || 0;
+      const total = totalPages || 1;
+      const percentage = Math.min(100, Math.round((pages / total) * 100));
+      progressValue.textContent = `${percentage}%`;
+      progressBar.style.width = `${percentage}%`;
+    };
+
+    // Update displayed percentage as pages input changes (typing)
+    pagesReadInput.addEventListener('input', updateProgressDisplay);
+
+    // Also handle change event for arrow button clicks
+    pagesReadInput.addEventListener('change', updateProgressDisplay);
+
+    // Save progress when button is clicked
+    saveProgressBtn.addEventListener('click', () => {
+      const pages = parseInt(pagesReadInput.value, 10) || 0;
+      const total = totalPages || 1;
+      const newProgress = Math.min(100, Math.round((pages / total) * 100));
+      const result = updateProgress(book.id, newProgress, pages);
+
+      if (result.success) {
+        if (newProgress === 100) {
+          showToast('Book completed! Moved to Completed list');
+        } else {
+          showToast(`Progress updated: ${pages} of ${totalPages} pages (${newProgress}%)`);
+        }
+        closeModalAndRefresh();
+      } else {
+        showToast(result.error || 'Failed to update progress', 'error');
+      }
+    });
+  }
 }
 
 /**
@@ -165,7 +240,10 @@ function closeModalAndRefresh() {
     overlay.classList.remove('active');
     setTimeout(() => {
       overlay.remove();
-      refreshCurrentView();
+      // Use requestAnimationFrame to ensure DOM is updated before refresh
+      requestAnimationFrame(() => {
+        refreshCurrentView();
+      });
     }, 300);
   }
   document.removeEventListener('keydown', handleEscape);

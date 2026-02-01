@@ -399,7 +399,7 @@ async function searchOpenLibrary(query, options = {}) {
     page = 1,
     limit = CONFIG.defaults.resultsPerPage,
     sort = 'relevance',
-    fields = 'key,title,author_name,first_publish_year,cover_i,isbn,subject,publisher,language,edition_count,ratings_average',
+    fields = 'key,title,author_name,first_publish_year,cover_i,isbn,subject,publisher,language,edition_count,ratings_average,number_of_pages_median',
   } = options;
 
   const params = new URLSearchParams({
@@ -511,6 +511,7 @@ function normalizeOpenLibraryBook(book) {
       : book.publisher || null,
     language: book.language?.[0] || null,
     editionCount: book.edition_count || 0,
+    pageCount: book.number_of_pages_median || null,
     rating: book.ratings_average
       ? Math.round(book.ratings_average * 10) / 10
       : null,

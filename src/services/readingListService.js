@@ -247,9 +247,10 @@ export function moveToList(bookId, fromList, toList) {
  * Update a book's progress (for currently reading)
  * @param {string|number} bookId - The book ID
  * @param {number} progress - Progress percentage (0-100)
+ * @param {number} pagesRead - Number of pages read (optional)
  * @returns {{ success: boolean, error?: string }}
  */
-export function updateProgress(bookId, progress) {
+export function updateProgress(bookId, progress, pagesRead = null) {
   const lists = getReadingLists();
   const id = String(bookId);
 
@@ -260,6 +261,11 @@ export function updateProgress(bookId, progress) {
 
   // Clamp progress between 0 and 100
   book.progress = Math.max(0, Math.min(100, progress));
+
+  // Save pages read if provided
+  if (pagesRead !== null) {
+    book.pagesRead = pagesRead;
+  }
 
   // If progress is 100, optionally move to completed
   if (book.progress === 100) {

@@ -1,4 +1,3 @@
-import { userStats } from '../data/books.js';
 import { openBookModal } from '../components/BookModal.js';
 import { getReadingLists, getListStats } from '../services/readingListService.js';
 
@@ -6,6 +5,16 @@ export function renderHome(container) {
   // Get reading lists from storage
   const readingLists = getReadingLists();
   const stats = getListStats();
+
+  // Calculate pages read including currently reading books (based on progress)
+  const completedPagesRead = stats.totalPagesRead || 0;
+  const currentlyReadingPagesRead = readingLists.reading.reduce((sum, book) => {
+    const totalPages = book.pages || 0;
+    const progress = book.progress || 0;
+    const pagesRead = book.pagesRead || Math.round((progress / 100) * totalPages);
+    return sum + pagesRead;
+  }, 0);
+  const totalPagesRead = completedPagesRead + currentlyReadingPagesRead;
 
   container.innerHTML = `
     <section class="hero">
@@ -50,35 +59,35 @@ export function renderHome(container) {
       </div>
 
       <aside class="sidebar">
-        <div class="stats-widget">
-          <h3>Quick Stats</h3>
+        <div class="stats-widget" id="quick-stats-widget" style="cursor: pointer;" title="Click to view detailed stats">
+          <h3>Quick Stats <span style="font-size: 0.75rem; color: var(--gray-400);">→</span></h3>
           <div class="stat-items">
             <div class="stat-item">
               <div class="stat-icon books">📚</div>
               <div>
-                <div class="stat-value">${stats.completed || userStats.booksRead}</div>
+                <div class="stat-value">${stats.completed}</div>
                 <div class="stat-label">Books Read</div>
               </div>
             </div>
             <div class="stat-item">
               <div class="stat-icon pages">📄</div>
               <div>
-                <div class="stat-value">${(stats.totalPagesRead || userStats.pagesRead).toLocaleString()}</div>
+                <div class="stat-value">${totalPagesRead.toLocaleString()}</div>
                 <div class="stat-label">Pages Read</div>
               </div>
             </div>
             <div class="stat-item">
               <div class="stat-icon rating">⭐</div>
               <div>
-                <div class="stat-value">${stats.averageRating || userStats.avgRating}</div>
+                <div class="stat-value">${stats.averageRating.toFixed(1)}</div>
                 <div class="stat-label">Avg Rating</div>
               </div>
             </div>
             <div class="stat-item">
-              <div class="stat-icon streak">🔥</div>
+              <div class="stat-icon streak">📖</div>
               <div>
-                <div class="stat-value">${userStats.readingStreak}</div>
-                <div class="stat-label">Day Streak</div>
+                <div class="stat-value">${stats.reading}</div>
+                <div class="stat-label">Currently Reading</div>
               </div>
             </div>
           </div>
@@ -106,6 +115,12 @@ export function renderHome(container) {
   searchBtn.addEventListener('click', doSearch);
   searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') doSearch();
+  });
+
+  // Quick Stats widget click handler - navigate to Stats page
+  const statsWidget = document.getElementById('quick-stats-widget');
+  statsWidget.addEventListener('click', () => {
+    window.location.hash = '/stats';
   });
 }
 
