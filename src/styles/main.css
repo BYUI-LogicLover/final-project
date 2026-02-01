@@ -93,8 +93,8 @@ h6 {
    -------------------------------------------------------------------------- */
 :root {
   /* Typography - Font Families */
-  --font-heading: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 
   /* Typography - Font Sizes (using clamp for fluid scaling) */
   --text-xs: 0.75rem;      /* 12px */
@@ -234,6 +234,7 @@ h6 {
   --space-5: 1.25rem;   /* 20px */
   --space-6: 1.5rem;    /* 24px */
   --space-8: 2rem;      /* 32px */
+  --space-9: 2.25rem;   /* 36px */
   --space-10: 2.5rem;   /* 40px */
   --space-12: 3rem;     /* 48px */
   --space-16: 4rem;     /* 64px */
@@ -1443,7 +1444,7 @@ strong {
 
 .book-card-cover {
   width: 100%;
-  aspect-ratio: 2/3;
+  aspect-ratio: 2 / 3; /* Enforce a book-like aspect ratio */
   background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%);
   display: flex;
   align-items: center;
@@ -1470,7 +1471,6 @@ strong {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  flex: 1;
 }
 
 .book-card-title {

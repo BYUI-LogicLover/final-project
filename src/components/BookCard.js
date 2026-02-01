@@ -90,22 +90,35 @@ export function createBookCard(book) {
   const rating = typeof book.rating === 'number' ? book.rating : 0;
 
   // Check if book is already in a list
-  const { inList, listType } = getBookListStatus(book.id);
+  const { inList } = getBookListStatus(book.id);
   const buttonText = inList ? '✓ In List' : '+ Add to List';
   const buttonClass = inList ? 'add-to-list-btn in-list' : 'add-to-list-btn';
 
   // Get cover URL (from API, ISBN, or placeholder)
   const coverUrl = getBookCoverUrl(book);
-  const placeholderSvg = getPlaceholderCover(book.title || 'Book').replace(/'/g, "\\'").replace(/\n/g, '');
 
-  card.innerHTML = `
-    <div class="book-card-cover">
-      ${coverUrl
-        ? `<img src="${coverUrl}" alt="${safeTitle}" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='${placeholderSvg}'">`
-        : getPlaceholderCover(book.title || 'Book')
-      }
-    </div>
-    <div class="book-card-info">
+  const coverContainer = document.createElement('div');
+  coverContainer.className = 'book-card-cover';
+
+  if (coverUrl) {
+    const img = document.createElement('img');
+    img.src = coverUrl;
+    img.alt = `Cover for ${safeTitle}`;
+    img.loading = 'lazy';
+    img.className = 'book-card-image';
+    // Fallback to placeholder if image fails to load
+    img.onerror = () => {
+      img.remove();
+      coverContainer.innerHTML = getPlaceholderCover(book.title || 'Book');
+    };
+    coverContainer.appendChild(img);
+  } else {
+    coverContainer.innerHTML = getPlaceholderCover(book.title || 'Book');
+  }
+
+  const infoContainer = document.createElement('div');
+  infoContainer.className = 'book-card-info';
+  infoContainer.innerHTML = `
       <h4 class="book-card-title">${safeTitle}</h4>
       <p class="book-card-author">${safeAuthor}</p>
       ${truncatedDesc ? `
@@ -119,8 +132,10 @@ export function createBookCard(book) {
         <span class="rating-value">${rating.toFixed(1)}</span>
       </div>
       <button class="${buttonClass}" data-book-id="${book.id}">${buttonText}</button>
-    </div>
   `;
+
+  card.appendChild(coverContainer);
+  card.appendChild(infoContainer);
 
   card.addEventListener('click', (e) => {
     if (!e.target.classList.contains('add-to-list-btn')) {
