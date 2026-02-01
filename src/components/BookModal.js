@@ -94,7 +94,7 @@ export function openBookModal(book) {
     const result = addToList(book, LIST_TYPES.READING);
     if (result.success) {
       showToast('Added to Currently Reading');
-      closeModal();
+      closeModalAndRefresh();
     }
   });
 
@@ -102,7 +102,7 @@ export function openBookModal(book) {
     const result = addToList(book, LIST_TYPES.COMPLETED);
     if (result.success) {
       showToast('Marked as Completed');
-      closeModal();
+      closeModalAndRefresh();
     }
   });
 
@@ -110,7 +110,7 @@ export function openBookModal(book) {
     const result = addToList(book, LIST_TYPES.TO_READ);
     if (result.success) {
       showToast('Added to Want to Read');
-      closeModal();
+      closeModalAndRefresh();
     }
   });
 }
@@ -156,8 +156,31 @@ function closeModal() {
   document.removeEventListener('keydown', handleEscape);
 }
 
+/**
+ * Close modal and refresh the current view after modal animation completes
+ */
+function closeModalAndRefresh() {
+  const overlay = document.getElementById('book-modal');
+  if (overlay) {
+    overlay.classList.remove('active');
+    setTimeout(() => {
+      overlay.remove();
+      refreshCurrentView();
+    }, 300);
+  }
+  document.removeEventListener('keydown', handleEscape);
+}
+
 function handleEscape(e) {
   if (e.key === 'Escape') closeModal();
+}
+
+/**
+ * Refresh the current view by triggering a re-render
+ */
+function refreshCurrentView() {
+  // Dispatch a hashchange event to trigger the router to re-render
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
 }
 
 function getStars(rating) {

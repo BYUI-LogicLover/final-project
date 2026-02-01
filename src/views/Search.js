@@ -50,108 +50,26 @@ export function renderSearch(container) {
   // Create page structure
   container.innerHTML = `
     <div class="search-page">
-      <aside class="filters-sidebar" id="filters-sidebar">
-        <h3>Advanced Filters</h3>
-
-        <div class="filter-group">
-          <label for="genre-filter">Genre</label>
-          <select id="genre-filter">
-            <option value="">All Genres</option>
-            <option value="fiction">Fiction</option>
-            <option value="fantasy">Fantasy</option>
-            <option value="science-fiction">Science Fiction</option>
-            <option value="romance">Romance</option>
-            <option value="dystopian">Dystopian</option>
-            <option value="classic">Classic</option>
-            <option value="gothic">Gothic</option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label for="rating-filter">Minimum Rating</label>
-          <select id="rating-filter">
-            <option value="">Any Rating</option>
-            <option value="4.5">4.5+ Stars</option>
-            <option value="4">4+ Stars</option>
-            <option value="3.5">3.5+ Stars</option>
-            <option value="3">3+ Stars</option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label for="year-filter">Publication Year</label>
-          <select id="year-filter">
-            <option value="">Any Year</option>
-            <option value="2020">2020s</option>
-            <option value="2010">2010s</option>
-            <option value="2000">2000s</option>
-            <option value="1900">20th Century</option>
-            <option value="1800">19th Century & Earlier</option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label for="pages-filter">Page Count</label>
-          <select id="pages-filter">
-            <option value="">Any Length</option>
-            <option value="short">Under 200 pages</option>
-            <option value="medium">200-400 pages</option>
-            <option value="long">400-600 pages</option>
-            <option value="epic">600+ pages</option>
-          </select>
-        </div>
-
-        <button class="btn btn-primary btn-block mt-4" id="apply-filters">
-          Apply Filters
-        </button>
-
-        <button class="btn btn-ghost btn-block mt-2" id="clear-filters">
-          Clear All Filters
-        </button>
-      </aside>
-
-      <div class="search-results" id="search-results-area">
-        <div class="search-header" id="search-header"></div>
-        <div id="results-container-wrapper"></div>
-      </div>
+      <div class="search-bar-wrapper" id="search-bar-container"></div>
+      <div class="search-results-container" id="search-results-container"></div>
     </div>
   `;
 
-  // Get container elements
-  const searchHeader = document.getElementById('search-header');
-  const resultsWrapper = document.getElementById('results-container-wrapper');
+  const searchBarContainer = document.getElementById('search-bar-container');
+  const resultsContainer = document.getElementById('search-results-container');
 
-  // Create and append search bar
-  const searchBar = createSearchBar({
+  // Create and append the search bar and results components
+  searchBarContainer.appendChild(createSearchBar({
     initialQuery,
-    placeholder: 'Search for books, authors, or ISBN...',
-    helperText: 'Search by title, author name, genre, or ISBN number',
-    autofocus: true,
-    showFilters: true,
     onSearch: handleSearch,
     onFilterChange: handleQuickFilterChange,
-  });
-  searchHeader.appendChild(searchBar);
+  }));
+  resultsContainer.appendChild(createResultsContainer());
 
-  // Create and append results container
-  const resultsContainer = createResultsContainer({
-    id: 'search-results',
-    showStats: true,
-  });
-  resultsWrapper.appendChild(resultsContainer);
-
-  // Get elements
-  const resultsGrid = document.getElementById('results-grid');
-  const pagination = document.getElementById('results-pagination');
-
-  // Filter elements
-  const genreFilter = document.getElementById('genre-filter');
-  const ratingFilter = document.getElementById('rating-filter');
-  const yearFilter = document.getElementById('year-filter');
-  const pagesFilter = document.getElementById('pages-filter');
-  const applyFiltersBtn = document.getElementById('apply-filters');
-  const clearFiltersBtn = document.getElementById('clear-filters');
-  const retryBtn = document.getElementById('retry-search');
+  // Get elements from the dynamically created components
+  const resultsGrid = resultsContainer.querySelector('#results-grid');
+  const pagination = resultsContainer.querySelector('#results-pagination');
+  const searchInput = searchBarContainer.querySelector('#search-bar-input');
 
   // Debounced search for live typing (300ms delay)
   const debouncedSearch = debounce((query) => {
@@ -161,7 +79,6 @@ export function renderSearch(container) {
   }, 300);
 
   // Connect debounced search to input for live search as user types
-  const searchInput = document.getElementById('search-bar-input');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       debouncedSearch(e.target.value);
@@ -214,10 +131,7 @@ export function renderSearch(container) {
       lastSearchResults = books;
       totalPages = response.totalPages || 1;
 
-      // Apply local filters (genre, rating, year, pages) since API doesn't support them
-      const filteredBooks = applyLocalFilters(books);
-
-      if (filteredBooks.length === 0) {
+      if (books.length === 0) {
         updateResultsState(resultsContainer, {
           empty: true,
           count: 0,
@@ -227,13 +141,13 @@ export function renderSearch(container) {
       }
 
       // Success - display books
-      displayBooks(filteredBooks);
+      displayBooks(books);
 
       updateResultsState(resultsContainer, {
         loading: false,
         empty: false,
         error: false,
-        count: response.total || filteredBooks.length,
+        count: response.total || books.length,
         query: currentQuery,
         showPagination: totalPages > 1,
       });
@@ -245,104 +159,6 @@ export function renderSearch(container) {
     }
   }
 
-  /**
-   * Apply local filters to API results (genre, rating, year, pages)
-   */
-  function applyLocalFilters(books) {
-    const genre = genreFilter.value.toLowerCase();
-    const minRating = parseFloat(ratingFilter.value) || 0;
-    const yearRange = yearFilter.value;
-    const pageRange = pagesFilter.value;
-
-    return books.filter(book => {
-      // Genre filter
-      const bookGenre = (book.genre || '').toLowerCase();
-      const matchesGenre = !genre || bookGenre.includes(genre);
-
-      // Rating filter
-      const matchesRating = (book.rating || 0) >= minRating;
-
-      // Year filter
-      let matchesYear = true;
-      if (yearRange && book.published) {
-        const pubYear = parseInt(book.published);
-        if (!isNaN(pubYear)) {
-          switch (yearRange) {
-            case '2020':
-              matchesYear = pubYear >= 2020;
-              break;
-            case '2010':
-              matchesYear = pubYear >= 2010 && pubYear < 2020;
-              break;
-            case '2000':
-              matchesYear = pubYear >= 2000 && pubYear < 2010;
-              break;
-            case '1900':
-              matchesYear = pubYear >= 1900 && pubYear < 2000;
-              break;
-            case '1800':
-              matchesYear = pubYear < 1900;
-              break;
-          }
-        }
-      }
-
-      // Page count filter
-      let matchesPages = true;
-      if (pageRange && book.pages) {
-        switch (pageRange) {
-          case 'short':
-            matchesPages = book.pages < 200;
-            break;
-          case 'medium':
-            matchesPages = book.pages >= 200 && book.pages < 400;
-            break;
-          case 'long':
-            matchesPages = book.pages >= 400 && book.pages < 600;
-            break;
-          case 'epic':
-            matchesPages = book.pages >= 600;
-            break;
-        }
-      }
-
-      // Quick filter types
-      let matchesType = true;
-      if (currentFilters.types && currentFilters.types.length > 0) {
-        const genreLower = bookGenre;
-        matchesType = currentFilters.types.some(type => {
-          switch (type) {
-            case 'fiction':
-              return genreLower.includes('fiction') && !genreLower.includes('non-fiction');
-            case 'nonfiction':
-              return genreLower.includes('non-fiction');
-            case 'fantasy':
-              return genreLower.includes('fantasy');
-            case 'scifi':
-              return genreLower.includes('science fiction') || genreLower.includes('sci-fi');
-            case 'romance':
-              return genreLower.includes('romance');
-            default:
-              return true;
-          }
-        });
-      }
-
-      return matchesGenre && matchesRating && matchesYear && matchesPages && matchesType;
-    }).sort((a, b) => {
-      // Sort based on current sort selection
-      switch (currentFilters.sort) {
-        case 'newest':
-          return parseInt(b.published || 0) - parseInt(a.published || 0);
-        case 'rating':
-          return (b.rating || 0) - (a.rating || 0);
-        case 'title':
-          return (a.title || '').localeCompare(b.title || '');
-        default:
-          return 0; // Keep original order for relevance
-      }
-    });
-  }
 
   /**
    * Display books (API already handles pagination)
@@ -468,49 +284,6 @@ export function renderSearch(container) {
     }
   }
 
-  /**
-   * Clear all filters
-   */
-  function clearAllFilters() {
-    genreFilter.value = '';
-    ratingFilter.value = '';
-    yearFilter.value = '';
-    pagesFilter.value = '';
-
-    // Reset quick filters
-    const filterBtns = searchBar.querySelectorAll('.quick-filter-btn');
-    filterBtns.forEach(btn => {
-      btn.classList.remove('active');
-      if (btn.dataset.value === 'all') {
-        btn.classList.add('active');
-      }
-    });
-
-    const sortSelect = searchBar.querySelector('#quick-sort');
-    if (sortSelect) {
-      sortSelect.value = 'relevance';
-    }
-
-    currentFilters = { types: [], sort: 'relevance' };
-    performSearch();
-  }
-
-  // Event listeners for sidebar filters
-  applyFiltersBtn.addEventListener('click', () => performSearch());
-  clearFiltersBtn.addEventListener('click', clearAllFilters);
-
-  // Retry button for error state
-  if (retryBtn) {
-    retryBtn.addEventListener('click', () => performSearch());
-  }
-
-  // Allow filters to trigger search on change (optional - for immediate feedback)
-  [genreFilter, ratingFilter, yearFilter, pagesFilter].forEach(filter => {
-    filter.addEventListener('change', () => {
-      // Optional: Auto-apply filters on change
-      // performSearch();
-    });
-  });
 
   // Initial search
   performSearch();

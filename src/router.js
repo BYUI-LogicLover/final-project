@@ -18,7 +18,9 @@ export const router = {
 
   handleRoute() {
     const hash = window.location.hash.slice(1) || '/';
-    const route = routes[hash] || routes['/'];
+    // Extract the path without query parameters
+    const path = hash.split('?')[0] || '/';
+    const route = routes[path] || routes['/'];
     const mainContent = document.getElementById('main-content');
     mainContent.innerHTML = '';
     route(mainContent);
