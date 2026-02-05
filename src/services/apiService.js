@@ -24,6 +24,16 @@ const CONFIG = {
     apiKey: null, // Replace with your key: 'YOUR_API_KEY'
   },
 
+  // New York Times Books API (requires API key)
+  nyTimes: {
+    baseUrl: 'https://api.nytimes.com/svc/books/v3',
+    listsUrl: 'https://api.nytimes.com/svc/books/v3/lists',
+    reviewsUrl: 'https://api.nytimes.com/svc/books/v3/reviews',
+    // Set your API key here or use environment variable
+    // Get your key at: https://developer.nytimes.com/
+    apiKey: null, // Replace with your key: 'YOUR_NYT_API_KEY'
+  },
+
   // Rate limiting settings
   rateLimit: {
     maxRequests: 10,      // Maximum requests per time window
@@ -729,6 +739,260 @@ function normalizeGoogleBookDetails(item) {
 }
 
 // =============================================================================
+// New York Times Books API Functions
+// =============================================================================
+
+/**
+ * Get all available NYT bestseller list names
+ * @returns {Promise<Array>} Array of list names and metadata
+ */
+async function getNYTListNames() {
+  if (!CONFIG.nyTimes.apiKey) {
+    throw new ApiError(
+      'NYT API key is required. Get one at https://developer.nytimes.com/',
+      401,
+      ErrorCodes.NETWORK_ERROR
+    );
+  }
+
+  const params = new URLSearchParams({
+    'api-key': CONFIG.nyTimes.apiKey,
+  });
+
+  const url = `${CONFIG.nyTimes.listsUrl}/names.json?${params}`;
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+  return data.results || [];
+}
+
+/**
+ * Get NYT bestseller list by name and date
+ * @param {string} listName - List name (e.g., 'hardcover-fiction')
+ * @param {string} date - Date in YYYY-MM-DD format or 'current'
+ * @returns {Promise<Object>} Bestseller list with books
+ */
+async function getNYTBestsellerList(listName, date = 'current') {
+  if (!CONFIG.nyTimes.apiKey) {
+    throw new ApiError(
+      'NYT API key is required. Get one at https://developer.nytimes.com/',
+      401,
+      ErrorCodes.NETWORK_ERROR
+    );
+  }
+
+  const params = new URLSearchParams({
+    'api-key': CONFIG.nyTimes.apiKey,
+  });
+
+  const url = `${CONFIG.nyTimes.listsUrl}/${date}/${listName}.json?${params}`;
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new ApiError('Bestseller list not found', 404, ErrorCodes.NOT_FOUND);
+    }
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+  const results = data.results || {};
+
+  return {
+    listName: results.list_name || listName,
+    displayName: results.display_name || listName,
+    publishedDate: results.published_date || null,
+    bestsellersDate: results.bestsellers_date || null,
+    books: (results.books || []).map(normalizeNYTBook),
+  };
+}
+
+/**
+ * Search NYT bestseller history
+ * @param {Object} options - Search options
+ * @param {string} options.author - Author name
+ * @param {string} options.title - Book title
+ * @param {string} options.isbn - ISBN
+ * @param {number} options.offset - Pagination offset (multiples of 20)
+ * @returns {Promise<Object>} Search results
+ */
+async function searchNYTBestsellerHistory(options = {}) {
+  if (!CONFIG.nyTimes.apiKey) {
+    throw new ApiError(
+      'NYT API key is required. Get one at https://developer.nytimes.com/',
+      401,
+      ErrorCodes.NETWORK_ERROR
+    );
+  }
+
+  const { author, title, isbn, offset = 0 } = options;
+
+  const params = new URLSearchParams({
+    'api-key': CONFIG.nyTimes.apiKey,
+  });
+
+  if (author) params.set('author', author);
+  if (title) params.set('title', title);
+  if (isbn) params.set('isbn', isbn);
+  if (offset > 0) params.set('offset', offset.toString());
+
+  const url = `${CONFIG.nyTimes.listsUrl}/best-sellers/history.json?${params}`;
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+
+  return {
+    books: (data.results || []).map(normalizeNYTHistoryBook),
+    total: data.num_results || 0,
+    offset,
+    hasMore: offset + 20 < (data.num_results || 0),
+  };
+}
+
+/**
+ * Get NYT book reviews
+ * @param {Object} options - Search options
+ * @param {string} options.author - Author name
+ * @param {string} options.title - Book title
+ * @param {string} options.isbn - ISBN
+ * @returns {Promise<Array>} Array of reviews
+ */
+async function getNYTBookReviews(options = {}) {
+  if (!CONFIG.nyTimes.apiKey) {
+    throw new ApiError(
+      'NYT API key is required. Get one at https://developer.nytimes.com/',
+      401,
+      ErrorCodes.NETWORK_ERROR
+    );
+  }
+
+  const { author, title, isbn } = options;
+
+  const params = new URLSearchParams({
+    'api-key': CONFIG.nyTimes.apiKey,
+  });
+
+  if (author) params.set('author', author);
+  if (title) params.set('title', title);
+  if (isbn) params.set('isbn', isbn);
+
+  const url = `${CONFIG.nyTimes.reviewsUrl}.json?${params}`;
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+
+  return {
+    reviews: (data.results || []).map(normalizeNYTReview),
+    total: data.num_results || 0,
+  };
+}
+
+/**
+ * Normalize NYT bestseller book to common format
+ * @param {Object} book - Raw book data from NYT
+ * @returns {Object} Normalized book object
+ */
+function normalizeNYTBook(book) {
+  return {
+    id: book.primary_isbn13 || book.primary_isbn10 || null,
+    source: 'nytimes',
+    title: book.title || 'Unknown Title',
+    author: book.author || 'Unknown Author',
+    authors: book.author ? [book.author] : [],
+    description: book.description || '',
+    publisher: book.publisher || null,
+    coverUrl: book.book_image || null,
+    coverUrlLarge: book.book_image || null,
+    isbn: book.primary_isbn13 || book.primary_isbn10 || null,
+    isbn13: book.primary_isbn13 || null,
+    isbn10: book.primary_isbn10 || null,
+    rank: book.rank || null,
+    rankLastWeek: book.rank_last_week || null,
+    weeksOnList: book.weeks_on_list || 0,
+    buyLinks: book.buy_links || [],
+    amazonUrl: book.amazon_product_url || null,
+  };
+}
+
+/**
+ * Normalize NYT bestseller history book to common format
+ * @param {Object} book - Raw book data from NYT history
+ * @returns {Object} Normalized book object
+ */
+function normalizeNYTHistoryBook(book) {
+  const isbns = book.isbns || [];
+  const primaryIsbn = isbns[0] || {};
+
+  return {
+    id: primaryIsbn.isbn13 || primaryIsbn.isbn10 || null,
+    source: 'nytimes',
+    title: book.title || 'Unknown Title',
+    author: book.author || 'Unknown Author',
+    authors: book.author ? [book.author] : [],
+    description: book.description || '',
+    publisher: book.publisher || null,
+    coverUrl: null,
+    isbn: primaryIsbn.isbn13 || primaryIsbn.isbn10 || null,
+    isbn13: primaryIsbn.isbn13 || null,
+    isbn10: primaryIsbn.isbn10 || null,
+    isbns: isbns,
+    ranks: (book.ranks_history || []).map(r => ({
+      listName: r.list_name,
+      displayName: r.display_name,
+      rank: r.rank,
+      publishedDate: r.published_date,
+      weeksOnList: r.weeks_on_list,
+    })),
+    reviews: (book.reviews || []).map(r => ({
+      url: r.book_review_link,
+      firstChapterUrl: r.first_chapter_link,
+      sundayReviewUrl: r.sunday_review_link,
+    })),
+  };
+}
+
+/**
+ * Normalize NYT book review to common format
+ * @param {Object} review - Raw review data from NYT
+ * @returns {Object} Normalized review object
+ */
+function normalizeNYTReview(review) {
+  return {
+    url: review.url || null,
+    publicationDate: review.publication_dt || null,
+    byline: review.byline || null,
+    bookTitle: review.book_title || null,
+    bookAuthor: review.book_author || null,
+    summary: review.summary || '',
+    isbn13: review.isbn13 ? review.isbn13[0] : null,
+  };
+}
+
+// =============================================================================
 // Public API Functions
 // =============================================================================
 
@@ -869,6 +1133,161 @@ export async function searchBySubject(subject, options = {}) {
 }
 
 /**
+ * Get all available NYT bestseller list names
+ * @returns {Promise<Array>} Array of list metadata with names and update frequency
+ *
+ * @example
+ * const lists = await getBestsellerListNames();
+ * console.log(lists); // [{ list_name: 'hardcover-fiction', display_name: 'Hardcover Fiction', ... }]
+ */
+export async function getBestsellerListNames() {
+  const cacheKey = 'nyt:list-names';
+
+  const cached = getFromCache(cacheKey);
+  if (cached) {
+    console.log('Returning cached NYT list names');
+    return cached;
+  }
+
+  setLoading('search', true);
+  state.lastError = null;
+
+  try {
+    const result = await withRetry(async () => {
+      return await getNYTListNames();
+    });
+
+    setCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    const apiError = handleError(error, 'getBestsellerListNames');
+    state.lastError = apiError;
+    throw apiError;
+  } finally {
+    setLoading('search', false);
+  }
+}
+
+/**
+ * Get NYT bestseller list
+ * @param {string} listName - List name slug (e.g., 'hardcover-fiction', 'paperback-nonfiction')
+ * @param {string} date - Date in YYYY-MM-DD format or 'current' for latest
+ * @returns {Promise<Object>} Bestseller list with books array
+ *
+ * @example
+ * const list = await getBestsellerList('hardcover-fiction');
+ * console.log(list.books); // Array of bestseller books
+ */
+export async function getBestsellerList(listName, date = 'current') {
+  const cacheKey = `nyt:list:${listName}:${date}`;
+
+  const cached = getFromCache(cacheKey);
+  if (cached) {
+    console.log('Returning cached NYT bestseller list');
+    return cached;
+  }
+
+  setLoading('search', true);
+  state.lastError = null;
+
+  try {
+    const result = await withRetry(async () => {
+      return await getNYTBestsellerList(listName, date);
+    });
+
+    setCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    const apiError = handleError(error, 'getBestsellerList');
+    state.lastError = apiError;
+    throw apiError;
+  } finally {
+    setLoading('search', false);
+  }
+}
+
+/**
+ * Search NYT bestseller history
+ * @param {Object} options - Search options
+ * @param {string} options.author - Author name to search
+ * @param {string} options.title - Book title to search
+ * @param {string} options.isbn - ISBN to search
+ * @param {number} options.offset - Pagination offset (multiples of 20)
+ * @returns {Promise<Object>} Search results with books that have appeared on bestseller lists
+ *
+ * @example
+ * const results = await searchBestsellerHistory({ author: 'Stephen King' });
+ * console.log(results.books); // Array of books with bestseller history
+ */
+export async function searchBestsellerHistory(options = {}) {
+  const cacheKey = `nyt:history:${JSON.stringify(options)}`;
+
+  const cached = getFromCache(cacheKey);
+  if (cached) {
+    console.log('Returning cached NYT bestseller history');
+    return cached;
+  }
+
+  setLoading('search', true);
+  state.lastError = null;
+
+  try {
+    const result = await withRetry(async () => {
+      return await searchNYTBestsellerHistory(options);
+    });
+
+    setCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    const apiError = handleError(error, 'searchBestsellerHistory');
+    state.lastError = apiError;
+    throw apiError;
+  } finally {
+    setLoading('search', false);
+  }
+}
+
+/**
+ * Get NYT book reviews
+ * @param {Object} options - Search options (at least one required)
+ * @param {string} options.author - Author name
+ * @param {string} options.title - Book title
+ * @param {string} options.isbn - ISBN
+ * @returns {Promise<Object>} Object with reviews array and total count
+ *
+ * @example
+ * const { reviews } = await getBookReviews({ title: 'The Great Gatsby' });
+ * console.log(reviews); // Array of NYT reviews
+ */
+export async function getBookReviews(options = {}) {
+  const cacheKey = `nyt:reviews:${JSON.stringify(options)}`;
+
+  const cached = getFromCache(cacheKey);
+  if (cached) {
+    console.log('Returning cached NYT reviews');
+    return cached;
+  }
+
+  setLoading('search', true);
+  state.lastError = null;
+
+  try {
+    const result = await withRetry(async () => {
+      return await getNYTBookReviews(options);
+    });
+
+    setCache(cacheKey, result);
+    return result;
+  } catch (error) {
+    const apiError = handleError(error, 'getBookReviews');
+    state.lastError = apiError;
+    throw apiError;
+  } finally {
+    setLoading('search', false);
+  }
+}
+
+/**
  * Get the last error that occurred
  * @returns {ApiError|null} Last error or null
  */
@@ -967,6 +1386,10 @@ if (typeof window !== 'undefined') {
     searchByISBN,
     searchByAuthor,
     searchBySubject,
+    getBestsellerListNames,
+    getBestsellerList,
+    searchBestsellerHistory,
+    getBookReviews,
     getLoadingState,
     clearCache,
     getLastError,
