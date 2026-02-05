@@ -31,7 +31,7 @@ const CONFIG = {
     reviewsUrl: 'https://api.nytimes.com/svc/books/v3/reviews',
     // Set your API key here or use environment variable
     // Get your key at: https://developer.nytimes.com/
-    apiKey: null, // Replace with your key: 'YOUR_NYT_API_KEY'
+    apiKey: 'PwrCfF3M3EMmwiGSYYhLyCSuRL3gdvG7tUuPnWmqOaSdwhl9',
   },
 
   // Rate limiting settings
