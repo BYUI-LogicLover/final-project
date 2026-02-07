@@ -1346,22 +1346,20 @@ export function formatAuthors(authors, maxDisplay = 2) {
 
 /**
  * Generate a placeholder cover URL
- * @param {string} title - Book title
  * @returns {string} Placeholder URL or data URI
  */
-export function getPlaceholderCover(title = 'Book') {
-  // Return a simple SVG data URI as placeholder
-  const initials = title
-    .split(' ')
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase();
-
+export function getPlaceholderCover() {
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="128" height="192" viewBox="0 0 128 192">
-      <rect fill="#e5e7eb" width="128" height="192"/>
-      <text x="64" y="96" font-family="Arial, sans-serif" font-size="32" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle">${initials}</text>
+    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="180" viewBox="0 0 120 180">
+      <rect width="120" height="180" fill="#e5e7eb"/>
+      <rect x="30" y="40" width="60" height="80" rx="3" fill="#9ca3af"/>
+      <rect x="30" y="40" width="8" height="80" rx="2" fill="#6b7280"/>
+      <rect x="38" y="44" width="48" height="72" rx="1" fill="#f3f4f6"/>
+      <rect x="40" y="44" width="46" height="72" rx="1" fill="#9ca3af"/>
+      <rect x="48" y="58" width="30" height="3" rx="1.5" fill="rgba(255,255,255,0.5)"/>
+      <rect x="48" y="65" width="22" height="3" rx="1.5" fill="rgba(255,255,255,0.35)"/>
+      <rect x="48" y="96" width="18" height="2" rx="1" fill="rgba(255,255,255,0.3)"/>
+      <text x="60" y="148" text-anchor="middle" fill="#9ca3af" font-size="10" font-family="system-ui, sans-serif">No Cover</text>
     </svg>
   `;
 

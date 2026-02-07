@@ -54,16 +54,16 @@ export function createSearchBar(options = {}) {
             <path d="m6 6 12 12"></path>
           </svg>
         </button>
+        <button type="button" class="search-btn btn btn-primary" id="search-submit">
+          <span class="search-btn-text">Search</span>
+          <span class="search-btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.3-4.3"></path>
+            </svg>
+          </span>
+        </button>
       </div>
-      <button type="button" class="search-btn btn btn-primary" id="search-submit">
-        <span class="search-btn-text">Search</span>
-        <span class="search-btn-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.3-4.3"></path>
-          </svg>
-        </span>
-      </button>
     </div>
     ${helperText ? `<p class="search-helper-text">${helperText}</p>` : ''}
     ${showFilters ? createQuickFiltersHTML() : ''}
@@ -125,15 +125,28 @@ export function createSearchBar(options = {}) {
   // Filter events
   if (showFilters) {
     const filterBtns = wrapper.querySelectorAll('.quick-filter-btn');
+    const allBtn = wrapper.querySelector('[data-value="all"]');
+
     filterBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        // Toggle active state
         if (btn.dataset.value === 'all') {
+          // "All" button: deactivate all genre filters and activate "All"
           filterBtns.forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
         } else {
-          wrapper.querySelector('[data-value="all"]')?.classList.remove('active');
+          // Genre filter: toggle this filter
           btn.classList.toggle('active');
+
+          // Check if any genre filters are active
+          const activeGenreFilters = wrapper.querySelectorAll('.quick-filter-btn.active:not([data-value="all"])');
+
+          if (activeGenreFilters.length === 0) {
+            // No genre filters active, activate "All"
+            allBtn?.classList.add('active');
+          } else {
+            // Genre filters active, deactivate "All"
+            allBtn?.classList.remove('active');
+          }
         }
         onFilterChange(getSelectedFilters(wrapper));
       });
@@ -158,7 +171,7 @@ function createQuickFiltersHTML() {
   return `
     <div class="search-quick-filters">
       <div class="quick-filters-group">
-        <span class="quick-filters-label">Quick filters:</span>
+        <span class="quick-filters-label">Genre:</span>
         <div class="quick-filter-buttons">
           <button type="button" class="quick-filter-btn active" data-filter="type" data-value="all">All</button>
           <button type="button" class="quick-filter-btn" data-filter="type" data-value="fiction">Fiction</button>
@@ -166,6 +179,7 @@ function createQuickFiltersHTML() {
           <button type="button" class="quick-filter-btn" data-filter="type" data-value="fantasy">Fantasy</button>
           <button type="button" class="quick-filter-btn" data-filter="type" data-value="scifi">Sci-Fi</button>
           <button type="button" class="quick-filter-btn" data-filter="type" data-value="romance">Romance</button>
+          <button type="button" class="quick-filter-btn" data-filter="type" data-value="mystery">Mystery</button>
         </div>
       </div>
       <div class="quick-sort-group">

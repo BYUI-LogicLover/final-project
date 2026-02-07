@@ -36,25 +36,25 @@ function getBookCoverUrl(book) {
 /**
  * Generate SVG placeholder for missing book covers
  */
-function getPlaceholderCover(title) {
-  const initials = title
-    .split(' ')
-    .slice(0, 2)
-    .map(word => word.charAt(0).toUpperCase())
-    .join('');
-
-  // Generate a consistent color based on title
-  const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6'];
-  const colorIndex = title.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-  const bgColor = colors[colorIndex];
-
+function getPlaceholderCover() {
   return `
     <svg viewBox="0 0 120 180" class="placeholder-cover">
-      <rect width="120" height="180" fill="${bgColor}"/>
-      <text x="60" y="95" text-anchor="middle" fill="white" font-size="32" font-weight="600" font-family="system-ui, sans-serif">${initials}</text>
-      <rect x="15" y="140" width="90" height="4" rx="2" fill="rgba(255,255,255,0.3)"/>
-      <rect x="25" y="150" width="70" height="4" rx="2" fill="rgba(255,255,255,0.2)"/>
-      <rect x="35" y="160" width="50" height="4" rx="2" fill="rgba(255,255,255,0.15)"/>
+      <rect width="120" height="180" fill="#e5e7eb"/>
+      <!-- Book body -->
+      <rect x="30" y="40" width="60" height="80" rx="3" fill="#9ca3af"/>
+      <!-- Spine -->
+      <rect x="30" y="40" width="8" height="80" rx="2" fill="#6b7280"/>
+      <!-- Page edges -->
+      <rect x="38" y="44" width="48" height="72" rx="1" fill="#f3f4f6"/>
+      <!-- Cover front -->
+      <rect x="40" y="44" width="46" height="72" rx="1" fill="#9ca3af"/>
+      <!-- Title lines on cover -->
+      <rect x="48" y="58" width="30" height="3" rx="1.5" fill="rgba(255,255,255,0.5)"/>
+      <rect x="48" y="65" width="22" height="3" rx="1.5" fill="rgba(255,255,255,0.35)"/>
+      <!-- Author line -->
+      <rect x="48" y="96" width="18" height="2" rx="1" fill="rgba(255,255,255,0.3)"/>
+      <!-- Label -->
+      <text x="60" y="148" text-anchor="middle" fill="#9ca3af" font-size="10" font-family="system-ui, sans-serif">No Cover</text>
     </svg>
   `;
 }
@@ -109,11 +109,11 @@ export function createBookCard(book) {
     // Fallback to placeholder if image fails to load
     img.onerror = () => {
       img.remove();
-      coverContainer.innerHTML = getPlaceholderCover(book.title || 'Book');
+      coverContainer.innerHTML = getPlaceholderCover();
     };
     coverContainer.appendChild(img);
   } else {
-    coverContainer.innerHTML = getPlaceholderCover(book.title || 'Book');
+    coverContainer.innerHTML = getPlaceholderCover();
   }
 
   const infoContainer = document.createElement('div');

@@ -29,10 +29,107 @@ function normalizeBookForDisplay(book) {
     rating: book.rating || 0,
     pages: book.pageCount || 0,
     published: book.publishDate || '',
+    publishedYear: book.publishedYear || null,
     genre: Array.isArray(book.subjects) ? book.subjects[0] || '' : '',
+    subjects: book.subjects || [],
     description: book.description || '',
     ...book
   };
+}
+
+/**
+ * Map filter types to Open Library subject search terms
+ */
+const FILTER_SUBJECT_MAP = {
+  fiction: 'fiction',
+  nonfiction: 'nonfiction',
+  fantasy: 'fantasy',
+  scifi: 'science_fiction',
+  romance: 'romance',
+  mystery: 'mystery',
+};
+
+/**
+ * Build search query with genre filters
+ * @param {string} baseQuery - The user's search query
+ * @param {Array} types - Selected genre filter types
+ * @returns {string} Modified query with subject filters
+ */
+function buildSearchQuery(baseQuery, types = []) {
+  if (!types || types.length === 0) {
+    return baseQuery;
+  }
+
+  // Build subject query parts
+  const subjectQueries = types
+    .map(type => FILTER_SUBJECT_MAP[type])
+    .filter(Boolean)
+    .map(subject => `subject:${subject}`);
+
+  if (subjectQueries.length === 0) {
+    return baseQuery;
+  }
+
+  // Combine base query with subject filters
+  return `${baseQuery} ${subjectQueries.join(' ')}`;
+}
+
+/**
+ * Map sort option to Open Library sort parameter
+ */
+const SORT_MAP = {
+  relevance: null, // Default, no sort param needed
+  newest: 'new',
+  rating: null, // Client-side sort needed
+  title: null, // Client-side sort needed
+};
+
+/**
+ * Sort books client-side when API doesn't support the sort option
+ * @param {Array} books - Array of books to sort
+ * @param {string} sortBy - Sort option
+ * @returns {Array} Sorted books
+ */
+function sortBooksClientSide(books, sortBy) {
+  if (!sortBy || sortBy === 'relevance') {
+    return books; // Keep API order
+  }
+
+  const sortedBooks = [...books];
+
+  switch (sortBy) {
+    case 'newest':
+      // Sort by published year descending (newest first)
+      sortedBooks.sort((a, b) => {
+        const yearA = a.publishedYear || 0;
+        const yearB = b.publishedYear || 0;
+        return yearB - yearA;
+      });
+      break;
+
+    case 'rating':
+      // Sort by rating descending (highest first)
+      sortedBooks.sort((a, b) => {
+        const ratingA = a.rating || 0;
+        const ratingB = b.rating || 0;
+        return ratingB - ratingA;
+      });
+      break;
+
+    case 'title':
+      // Sort by title alphabetically
+      sortedBooks.sort((a, b) => {
+        const titleA = (a.title || '').toLowerCase();
+        const titleB = (b.title || '').toLowerCase();
+        return titleA.localeCompare(titleB);
+      });
+      break;
+
+    default:
+      break;
+  }
+
+  return sortedBooks;
 }
 
 export function renderSearch(container) {
@@ -49,7 +146,7 @@ export function renderSearch(container) {
 
   // Create page structure
   container.innerHTML = `
-    <div class="search-page">
+    <div class="search-page" style="display: block;">
       <div class="search-bar-wrapper" id="search-bar-container"></div>
       <div class="search-results-container" id="search-results-container"></div>
     </div>
@@ -122,12 +219,23 @@ export function renderSearch(container) {
     }
 
     try {
-      const response = await searchBooks(currentQuery, {
+      // Build query with genre filters
+      const searchQuery = buildSearchQuery(currentQuery, currentFilters.types);
+
+      // Get API sort parameter (if supported)
+      const apiSort = SORT_MAP[currentFilters.sort];
+
+      const response = await searchBooks(searchQuery, {
         page: currentPage,
         limit: booksPerPage,
+        sort: apiSort,
       });
 
-      const books = response.books.map(normalizeBookForDisplay);
+      let books = response.books.map(normalizeBookForDisplay);
+
+      // Apply client-side sorting if needed
+      books = sortBooksClientSide(books, currentFilters.sort);
+
       lastSearchResults = books;
       totalPages = response.totalPages || 1;
 
@@ -152,9 +260,12 @@ export function renderSearch(container) {
         showPagination: totalPages > 1,
       });
     } catch (error) {
+      const message = error.status === 442
+        ? 'Search error, please try again.'
+        : error.message || 'Failed to search books. Please try again.';
       updateResultsState(resultsContainer, {
         error: true,
-        errorMessage: error.message || 'Failed to search books. Please try again.',
+        errorMessage: message,
       });
     }
   }

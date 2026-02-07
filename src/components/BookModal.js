@@ -4,6 +4,25 @@ import { addToList, getBookListStatus, LIST_TYPES, updateProgress } from '../ser
 const COVERS_API = 'https://covers.openlibrary.org/b';
 
 /**
+ * Generate SVG placeholder for missing book covers in modal
+ */
+function getModalPlaceholderCover() {
+  return `
+    <svg viewBox="0 0 120 180" style="width:100%;height:100%;border-radius:var(--radius);">
+      <rect width="120" height="180" fill="#e5e7eb"/>
+      <rect x="30" y="40" width="60" height="80" rx="3" fill="#9ca3af"/>
+      <rect x="30" y="40" width="8" height="80" rx="2" fill="#6b7280"/>
+      <rect x="38" y="44" width="48" height="72" rx="1" fill="#f3f4f6"/>
+      <rect x="40" y="44" width="46" height="72" rx="1" fill="#9ca3af"/>
+      <rect x="48" y="58" width="30" height="3" rx="1.5" fill="rgba(255,255,255,0.5)"/>
+      <rect x="48" y="65" width="22" height="3" rx="1.5" fill="rgba(255,255,255,0.35)"/>
+      <rect x="48" y="96" width="18" height="2" rx="1" fill="rgba(255,255,255,0.3)"/>
+      <text x="60" y="148" text-anchor="middle" fill="#9ca3af" font-size="10" font-family="system-ui, sans-serif">No Cover</text>
+    </svg>
+  `;
+}
+
+/**
  * Get cover URL for a book
  */
 function getBookCoverUrl(book) {
@@ -72,10 +91,10 @@ export function openBookModal(book) {
       <div class="modal">
         <button class="modal-close">&times;</button>
         <div class="modal-content">
-          <div class="modal-cover">
+          <div class="modal-cover" id="modal-cover-container">
             ${coverUrl
-              ? `<img src="${coverUrl}" alt="${book.title}" onerror="this.onerror=null; this.parentElement.innerHTML='📚'">`
-              : '📚'
+              ? `<img src="${coverUrl}" alt="${book.title}" id="modal-cover-img">`
+              : getModalPlaceholderCover()
             }
           </div>
           <div class="modal-details">
@@ -114,6 +133,15 @@ export function openBookModal(book) {
 
   const overlay = document.getElementById('book-modal');
   requestAnimationFrame(() => overlay.classList.add('active'));
+
+  // Cover image fallback
+  const modalCoverImg = overlay.querySelector('#modal-cover-img');
+  if (modalCoverImg) {
+    modalCoverImg.onerror = () => {
+      modalCoverImg.onerror = null;
+      document.getElementById('modal-cover-container').innerHTML = getModalPlaceholderCover();
+    };
+  }
 
   // Close handlers
   overlay.querySelector('.modal-close').addEventListener('click', closeModal);
@@ -257,6 +285,11 @@ function handleEscape(e) {
  * Refresh the current view by triggering a re-render
  */
 function refreshCurrentView() {
+  // Don't refresh the search page — it would lose search state and results
+  const currentHash = window.location.hash;
+  if (currentHash.startsWith('#/search')) {
+    return;
+  }
   // Dispatch a hashchange event to trigger the router to re-render
   window.dispatchEvent(new HashChangeEvent('hashchange'));
 }
